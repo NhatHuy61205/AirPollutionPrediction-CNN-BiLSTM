@@ -1,2 +1,3 @@
 # AirPollutionPrediction-CNN-BiLSTM
 Tìm hiểu mô hình học sâu trong mô hình dự đoán ô nhiễm không khí dựa trên CNN và Bi-LSTM
+Phát triển một phương pháp học sâu dựa trên CNN và Bi-LSTM dự đoán nồng độ bụi mịn PM2.5 trong không khí tại Thành phố Hồ Chí Minh. Đối tượng nghiên cứu của đề tài là các yếu tố ảnh hưởng đến chất lượng không khí tại Việt nam, dựa trên bộ dữ liệu Air quality in Ho Chi Minh City tại một số điểm đo không khí tại Tp HCM.
