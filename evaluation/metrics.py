@@ -125,64 +125,54 @@ def compute_metrics_real_scale(
     scaler,
     eps: float = 1e-6,
     mask_nan: bool = True,
-    target_index: int | None = None,
+    target_index: int | None = None,  
+    mape_threshold: float = 1.0,
 ) -> Dict[str, float]:
     """
     Compute metrics on REAL PM2.5 scale (µg/m³), consistent with the reference paper.
 
-    Paper formulas:
-      RMSE = sqrt( (1/n) * sum (y - y_hat)^2 )
-      MAE  = (1/n) * sum |y - y_hat|
-      MAPE = (1/n) * sum ( |y - y_hat| / max(eps, |y|) )
-      Corr = Pearson correlation
+    - Nếu scaler được fit cho 1 cột (PM2.5): inverse_transform trực tiếp.
+    - Nếu scaler được fit cho nhiều cột: phải cung cấp target_index (vị trí PM2.5 trong scaler).
     """
 
     yt = _to_numpy(y_true_scaled).reshape(-1)
     yp = _to_numpy(y_pred_scaled).reshape(-1)
 
-
+    # --- detect scaler dimension ---
     n_feat = getattr(scaler, "n_features_in_", None)
     if n_feat is None:
-        n_feat = len(getattr(scaler, "scale_", [])) or len(getattr(scaler, "min_", [])) or 1
+        n_feat = len(getattr(scaler, "min_", []))
 
     if n_feat == 1:
         yt_real = scaler.inverse_transform(yt.reshape(-1, 1)).ravel()
         yp_real = scaler.inverse_transform(yp.reshape(-1, 1)).ravel()
+
     else:
         if target_index is None:
             raise ValueError(
                 f"Scaler was fitted on {n_feat} features. "
                 f"Please pass target_index (index of PM2.5 in the scaled feature list)."
             )
+
         ti = int(target_index)
-
-        Zt = np.zeros((yt.shape[0], n_feat), dtype=np.float64)
-        Zp = np.zeros((yp.shape[0], n_feat), dtype=np.float64)
-        Zt[:, ti] = yt
-        Zp[:, ti] = yp
-
-        Zt_real = scaler.inverse_transform(Zt)
-        Zp_real = scaler.inverse_transform(Zp)
-
-        yt_real = Zt_real[:, ti]
-        yp_real = Zp_real[:, ti]
+        yt_real = (yt - scaler.min_[ti]) / scaler.scale_[ti]
+        yp_real = (yp - scaler.min_[ti]) / scaler.scale_[ti]
 
     if mask_nan:
         m = np.isfinite(yt_real) & np.isfinite(yp_real)
         yt_real = yt_real[m]
         yp_real = yp_real[m]
 
-    if yt_real.size == 0:
-        return {"Correlation": np.nan, "RMSE": np.nan, "MAPE": np.nan, "MAE": np.nan}
-
     diff = yp_real - yt_real
 
     mae = float(np.mean(np.abs(diff)))
     rmse = float(np.sqrt(np.mean(diff ** 2)))
+    denom_mask = np.abs(yt_real) >= mape_threshold
+    if np.any(denom_mask):
+        mape = float(np.mean(np.abs(diff[denom_mask]) / np.abs(yt_real[denom_mask])))
+    else:
+        mape = float("nan")
 
-    mape = float(np.mean(np.abs(diff) / np.maximum(eps, np.abs(yt_real))))
-
-    # Pearson correlation
     if np.std(yt_real) < eps or np.std(yp_real) < eps:
         corr = float("nan")
     else:
