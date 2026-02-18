@@ -291,3 +291,93 @@ def predict_cnn_bilstm_multi(model, X_test, input_len=48, horizon=24):
     Xte_seq = np.array(Xte_seq)
     y_pred = model.predict(Xte_seq, verbose=0)
     return y_pred  # shape (n_samples, horizon)
+
+def build_cnn_bilstm_v2(
+    seq_len,
+    n_features,
+    lstm_units=256,
+    learning_rate=3e-4
+):
+    import tensorflow as tf
+    from tensorflow.keras import layers, models
+
+    inputs = layers.Input(shape=(seq_len, n_features))
+
+    # ===== CNN Block =====
+    x = layers.Conv1D(64, kernel_size=3, padding="same", activation="relu")(inputs)
+    x = layers.Conv1D(128, kernel_size=3, padding="same", activation="relu")(x)
+    x = layers.BatchNormalization()(x)
+
+    # ===== BiLSTM Block =====
+    x = layers.Bidirectional(
+        layers.LSTM(lstm_units, return_sequences=True)
+    )(x)
+    x = layers.Dropout(0.2)(x)
+
+    x = layers.Bidirectional(
+        layers.LSTM(lstm_units//2)
+    )(x)
+    x = layers.Dropout(0.2)(x)
+
+    # ===== Dense Head =====
+    x = layers.Dense(64, activation="relu")(x)
+    outputs = layers.Dense(1)(x)
+
+    model = models.Model(inputs, outputs)
+
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+        loss="mse"
+    )
+
+    return model
+
+def train_cnn_bilstm_v2(
+    X_train, y_train,
+    X_val, y_val,
+    seq_len=48,
+    epochs=200,
+    batch_size=64,
+    patience=20,
+    learning_rate=3e-4,
+    lstm_units=256,
+    checkpoint_path=None
+):
+    import numpy as np
+    from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+
+    # build sequences
+    Xtr_seq, ytr_seq = build_sequences(X_train, y_train, seq_len)
+    Xval_seq, yval_seq = build_sequences(X_val, y_val, seq_len)
+
+    model = build_cnn_bilstm_v2(
+        seq_len=seq_len,
+        n_features=Xtr_seq.shape[2],
+        lstm_units=lstm_units,
+        learning_rate=learning_rate
+    )
+
+    callbacks = [
+        EarlyStopping(monitor="val_loss", patience=patience, restore_best_weights=True)
+    ]
+
+    if checkpoint_path is not None:
+        callbacks.append(
+            ModelCheckpoint(
+                checkpoint_path,
+                monitor="val_loss",
+                save_best_only=True
+            )
+        )
+
+    history = model.fit(
+        Xtr_seq, ytr_seq,
+        validation_data=(Xval_seq, yval_seq),
+        epochs=epochs,
+        batch_size=batch_size,
+        shuffle=False,
+        verbose=1,
+        callbacks=callbacks
+    )
+
+    return model, history
