@@ -79,7 +79,7 @@ def _residual_cnn_block(x, filters: int, kernel_size: int, dilation: int, dropou
 def build_cnn_bilstm_model(
     seq_len: int,
     n_features: int,
-    horizon: int = 1,                 # ✅ NEW: 1-step or multi-step
+    horizon: int = 1,                 
     learning_rate: float = 3e-4,
     cnn_dropout: float = 0.15,
     lstm_dropout: float = 0.2,
@@ -112,7 +112,7 @@ def build_cnn_bilstm_model(
     x = Dense(128, activation="relu")(x)
     x = Dropout(0.2)(x)
 
-    out = Dense(horizon)(x)  # ✅ NEW: horizon outputs
+    out = Dense(horizon)(x)  
 
     model = Model(inp, out)
 
